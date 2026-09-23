@@ -31,6 +31,8 @@ export function ReelRail({ items, speed = 26 }: { items: MediaItem[]; speed?: nu
   const paused = useRef(false);
   const dragging = useRef(false);
   const moved = useRef(0);
+  /* px still to travel from an arrow press, eased out in the loop */
+  const nudge = useRef(0);
   const reduced = useReducedMotionPref();
   const wide = useMediaQuery("(min-width: 1024px)");
 
@@ -51,7 +53,13 @@ export function ReelRail({ items, speed = 26 }: { items: MediaItem[]; speed?: nu
     const loop = (now: number) => {
       const dt = Math.min(64, now - last) / 1000;
       last = now;
-      if (!paused.current && !dragging.current) {
+      if (nudge.current && !dragging.current) {
+        const step =
+          Math.abs(nudge.current) < 0.5 ? nudge.current : nudge.current * Math.min(1, dt * 9);
+        offset.current += step;
+        nudge.current -= step;
+        wrapOffset();
+      } else if (!paused.current && !dragging.current) {
         offset.current -= speed * dt;
         wrapOffset();
       }
@@ -146,21 +154,37 @@ export function ReelRail({ items, speed = 26 }: { items: MediaItem[]; speed?: nu
     moved.current = 0;
     startX.current = e.clientX;
     startOffset.current = offset.current;
-    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    /* capture is deferred until the pointer actually drags — capturing on
+       pointerdown retargets the click to the track, so a tap never reaches
+       the card and the viewer never opens */
   };
   const onPointerMove = (e: React.PointerEvent) => {
     if (!dragging.current) return;
     const dx = e.clientX - startX.current;
     moved.current = Math.max(moved.current, Math.abs(dx));
+    const el = e.currentTarget as HTMLElement;
+    if (moved.current > 6 && !el.hasPointerCapture(e.pointerId)) {
+      el.setPointerCapture(e.pointerId);
+    }
     offset.current = startOffset.current + dx;
     wrapOffset();
   };
   const endDrag = (e: React.PointerEvent) => {
     if (!dragging.current) return;
     dragging.current = false;
-    try {
-      (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
-    } catch {}
+    const el = e.currentTarget as HTMLElement;
+    if (el.hasPointerCapture(e.pointerId)) el.releasePointerCapture(e.pointerId);
+  };
+
+  /* arrows: move one card per press */
+  const step = (dir: 1 | -1) => {
+    const card = wrap.current?.querySelector<HTMLElement>("[data-reel]");
+    const width = (card?.offsetWidth ?? 300) + 20; // card + gap-5
+    if (reduced) {
+      wrap.current?.scrollBy({ left: dir * width, behavior: "smooth" });
+      return;
+    }
+    nudge.current -= dir * width;
   };
 
   /* pull a keyboard-focused card into view */
@@ -177,62 +201,81 @@ export function ReelRail({ items, speed = 26 }: { items: MediaItem[]; speed?: nu
   const activeSet = new Set(active);
 
   return (
-    <div
-      ref={wrap}
-      className={
-        reduced
-          ? "no-bar flex snap-x snap-mandatory gap-5 overflow-x-auto px-5 sm:px-8"
-          : "relative overflow-hidden px-5 sm:px-8"
-      }
-      /* hovering slows the travel only — previews keep running */
-      onPointerEnter={() => (paused.current = true)}
-      onPointerLeave={() => (paused.current = false)}
-      onFocusCapture={onFocusCapture}
-      onBlurCapture={() => (paused.current = false)}
-      data-cursor={reduced ? undefined : "DRAG"}
-      role="region"
-      aria-label="Top viewed reels — drag or use arrow keys"
-    >
+    <div className="relative">
       <div
-        ref={track}
-        className={reduced ? "contents" : "flex w-max cursor-grab gap-5 active:cursor-grabbing"}
-        onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={endDrag}
-        onPointerCancel={endDrag}
+        ref={wrap}
+        className={
+          reduced
+            ? "no-bar flex snap-x snap-mandatory gap-5 overflow-x-auto px-5 sm:px-8"
+            : "relative overflow-hidden px-5 sm:px-8"
+        }
+        /* hovering slows the travel only — previews keep running */
+        onPointerEnter={() => (paused.current = true)}
+        onPointerLeave={() => (paused.current = false)}
+        onFocusCapture={onFocusCapture}
+        onBlurCapture={() => (paused.current = false)}
+        data-cursor={reduced ? undefined : "DRAG"}
+        role="region"
+        aria-label="Top viewed reels — drag or use arrow keys"
       >
-        {list.map((item, i) => (
-          <div
-            key={`${item.id}-${i}`}
-            data-reel
-            data-index={i}
-            data-media-id={item.id}
-            data-playable={item.localVideo || item.youtubeId ? "1" : undefined}
-            className="w-[70vw] shrink-0 snap-start sm:w-[46vw] md:w-[34vw] lg:w-[27vw] xl:w-[calc(23.8vw-15px)]"
-          >
-            <ReelCard
-              item={item}
-              ratio="9:16"
-              priority={i < 3}
-              eager
-              duplicate={!reduced && i >= items.length}
-              preview={!reduced && activeSet.has(i)}
-              sizes="(max-width: 640px) 70vw, (max-width: 768px) 46vw, (max-width: 1024px) 34vw, (max-width: 1280px) 27vw, 24vw"
-              onOpen={() => {
-                if (moved.current > 6) return; // it was a drag, not a click
-                open(items, i % items.length);
-              }}
-            />
-          </div>
-        ))}
+        <div
+          ref={track}
+          className={reduced ? "contents" : "flex w-max cursor-grab gap-5 active:cursor-grabbing"}
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={endDrag}
+          onPointerCancel={endDrag}
+        >
+          {list.map((item, i) => (
+            <div
+              key={`${item.id}-${i}`}
+              data-reel
+              data-index={i}
+              data-media-id={item.id}
+              data-playable={item.localVideo || item.youtubeId ? "1" : undefined}
+              className="w-[70vw] shrink-0 snap-start sm:w-[46vw] md:w-[34vw] lg:w-[27vw] xl:w-[calc(23.8vw-15px)]"
+            >
+              <ReelCard
+                item={item}
+                ratio="9:16"
+                priority={i < 3}
+                eager
+                duplicate={!reduced && i >= items.length}
+                preview={!reduced && activeSet.has(i)}
+                sizes="(max-width: 640px) 70vw, (max-width: 768px) 46vw, (max-width: 1024px) 34vw, (max-width: 1280px) 27vw, 24vw"
+                onOpen={() => {
+                  if (moved.current > 6) return; // it was a drag, not a click
+                  open(items, i % items.length);
+                }}
+              />
+            </div>
+          ))}
+        </div>
+
+        {!reduced && (
+          <>
+            <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-16 bg-gradient-to-r from-obsidian to-transparent sm:w-28" />
+            <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-16 bg-gradient-to-l from-obsidian to-transparent sm:w-28" />
+          </>
+        )}
       </div>
 
-      {!reduced && (
-        <>
-          <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-16 bg-gradient-to-r from-obsidian to-transparent sm:w-28" />
-          <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-16 bg-gradient-to-l from-obsidian to-transparent sm:w-28" />
-        </>
-      )}
+      {(["prev", "next"] as const).map((side) => (
+        <button
+          key={side}
+          type="button"
+          onClick={() => step(side === "prev" ? -1 : 1)}
+          data-cursor={side === "prev" ? "PREV" : "NEXT"}
+          aria-label={side === "prev" ? "Previous reels" : "Next reels"}
+          className={`absolute top-1/2 z-20 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full border border-gold/40 bg-obsidian/70 text-ivory backdrop-blur transition-colors hover:border-gold hover:text-gold sm:h-14 sm:w-14 ${
+            side === "prev" ? "left-3 sm:left-6" : "right-3 sm:right-6"
+          }`}
+        >
+          <span aria-hidden className="text-lg sm:text-xl">
+            {side === "prev" ? "←" : "→"}
+          </span>
+        </button>
+      ))}
     </div>
   );
 }

@@ -7,40 +7,40 @@ import { Mic, LogoStack } from "./Logo";
  * Build credit. Set in Manrope rather than the site's metadata mono so it
  * reads as a signature instead of competing with Rob's own footer labels.
  */
-function Credit() {
-  const { name, url } = site.developer;
-  const label = (
-    <>
-      <span className="text-steel-dk">Developed by </span>
-      <span className="font-medium text-ivory/80 transition-colors duration-300 group-hover/credit:text-gold">
-        {name}
-      </span>
-    </>
-  );
+// function Credit() {
+//   const { name, url } = site.developer;
+//   const label = (
+//     <>
+//       <span className="text-steel-dk">Developed by </span>
+//       <span className="font-medium text-ivory/80 transition-colors duration-300 group-hover/credit:text-gold">
+//         {name}
+//       </span>
+//     </>
+//   );
 
-  return (
-    <p className="font-sans text-[0.8125rem] leading-none tracking-[-0.005em]">
-      {url ? (
-        <a
-          href={url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="group/credit inline-flex items-center gap-1.5"
-        >
-          {label}
-          <span
-            aria-hidden
-            className="translate-x-0 text-gold opacity-0 transition-all duration-300 group-hover/credit:translate-x-0.5 group-hover/credit:opacity-100"
-          >
-            ↗
-          </span>
-        </a>
-      ) : (
-        <span className="group/credit">{label}</span>
-      )}
-    </p>
-  );
-}
+//   return (
+//     <p className="font-sans text-[0.8125rem] leading-none tracking-[-0.005em]">
+//       {url ? (
+//         <a
+//           href={url}
+//           target="_blank"
+//           rel="noopener noreferrer"
+//           className="group/credit inline-flex items-center gap-1.5"
+//         >
+//           {label}
+//           <span
+//             aria-hidden
+//             className="translate-x-0 text-gold opacity-0 transition-all duration-300 group-hover/credit:translate-x-0.5 group-hover/credit:opacity-100"
+//           >
+//             ↗
+//           </span>
+//         </a>
+//       ) : (
+//         <span className="group/credit">{label}</span>
+//       )}
+//     </p>
+//   );
+// }
 
 export function Footer() {
   const year = new Date().getFullYear();
@@ -143,7 +143,7 @@ export function Footer() {
             </p>
           </div>
 
-          <Credit />
+          {/* <Credit /> */}
         </div>
       </div>
     </footer>
